@@ -24,7 +24,7 @@ const db = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  ssl: {
+  ssl:{
     rejectUnauthorized:false
   }
 })
@@ -105,6 +105,106 @@ professor:result[0]
 res.json({success:false})
 
 }
+
+})
+
+})
+
+/* =========================
+   TROCAR SENHA
+========================= */
+
+app.post("/trocar-senha",(req,res)=>{
+
+const {cpf,senhaAtual,novaSenha,tipo}=req.body
+
+let tabela = tipo === "professor" ? "professores" : "alunos"
+
+db.query(
+`SELECT * FROM ${tabela} WHERE cpf=? AND senha=?`,
+[cpf,senhaAtual],
+(err,result)=>{
+
+if(err){
+console.error(err)
+return res.json({success:false})
+}
+
+if(result.length===0){
+return res.json({success:false,msg:"Senha atual incorreta"})
+}
+
+db.query(
+`UPDATE ${tabela} SET senha=? WHERE cpf=?`,
+[novaSenha,cpf],
+(err)=>{
+
+if(err){
+console.error(err)
+return res.json({success:false})
+}
+
+res.json({success:true})
+
+})
+
+})
+
+})
+
+/* =========================
+   RECUPERAR SENHA
+========================= */
+
+app.post("/recuperar-senha",(req,res)=>{
+
+const {cpf,tipo}=req.body
+
+let tabela = tipo === "professor" ? "professores" : "alunos"
+
+db.query(
+`SELECT * FROM ${tabela} WHERE cpf=?`,
+[cpf],
+(err,result)=>{
+
+if(err){
+console.error(err)
+return res.json({success:false})
+}
+
+if(result.length===0){
+return res.json({success:false})
+}
+
+res.json({
+success:true
+})
+
+})
+
+})
+
+/* =========================
+   REDEFINIR SENHA
+========================= */
+
+app.post("/redefinir-senha",(req,res)=>{
+
+const {cpf,novaSenha,tipo}=req.body
+
+let tabela = tipo === "professor" ? "professores" : "alunos"
+
+db.query(
+`UPDATE ${tabela} SET senha=? WHERE cpf=?`,
+[novaSenha,cpf],
+(err)=>{
+
+if(err){
+console.error(err)
+return res.json({success:false})
+}
+
+res.json({success:true})
 
 })
 
@@ -274,7 +374,7 @@ res.json({success:true})
 })
 
 /* =========================
-   BOLETIM DO ALUNO
+   BOLETIM
 ========================= */
 
 app.get("/boletim/:id",(req,res)=>{
@@ -338,7 +438,7 @@ res.send("API Portal Escolar Online")
 })
 
 /* =========================
-   PORTA RENDER
+   PORTA
 ========================= */
 
 const PORT = process.env.PORT || 3000
