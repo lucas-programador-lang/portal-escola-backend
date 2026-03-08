@@ -1,35 +1,48 @@
 const express = require("express")
 const mysql = require("mysql2")
 const cors = require("cors")
-const path = require("path")
 
 const app = express()
 
 app.use(express.json())
-app.use(cors())
 
-app.use(express.static(__dirname))
+/* CORS PARA CLOUDFLARE */
+
+app.use(cors({
+origin: "*",
+methods: ["GET","POST"]
+}))
+
+/* CONEXÃO MYSQL */
 
 const db = mysql.createConnection({
-host:"localhost",
-user:"root",
-password:"",
-database:"escola"
+
+host: process.env.DB_HOST || "localhost",
+user: process.env.DB_USER || "root",
+password: process.env.DB_PASSWORD || "",
+database: process.env.DB_NAME || "escola"
+
 })
 
 db.connect(err=>{
+
 if(err){
-console.log("Erro ao conectar ao banco")
+console.log("❌ Erro ao conectar no banco:",err)
 }else{
-console.log("Banco conectado")
+console.log("✅ Banco conectado")
 }
+
 })
 
-/* LOGIN */
+
+
+/* =========================
+   LOGIN ALUNO
+========================= */
 
 app.post("/login",(req,res)=>{
 
-const {cpf}=req.body
+const {cpf} = req.body
 
 db.query(
 "SELECT * FROM alunos WHERE cpf=?",
@@ -37,7 +50,7 @@ db.query(
 (err,result)=>{
 
 if(err){
-return res.json({success:false})
+return res.json({success:false,error:err})
 }
 
 if(result.length>0){
@@ -57,7 +70,81 @@ res.json({success:false})
 
 })
 
-/* BOLETIM */
+
+
+/* =========================
+   LISTAR ALUNOS
+========================= */
+
+app.get("/alunos",(req,res)=>{
+
+db.query("SELECT * FROM alunos",(err,result)=>{
+
+if(err){
+return res.json([])
+}
+
+res.json(result)
+
+})
+
+})
+
+
+
+/* =========================
+   CADASTRAR ALUNO
+========================= */
+
+app.post("/aluno",(req,res)=>{
+
+const {nome,cpf}=req.body
+
+db.query(
+"INSERT INTO alunos(nome,cpf) VALUES (?,?)",
+[nome,cpf],
+(err,result)=>{
+
+if(err){
+return res.json({success:false,error:err})
+}
+
+res.json({success:true})
+
+})
+
+})
+
+
+
+/* =========================
+   REGISTRAR NOTA
+========================= */
+
+app.post("/nota",(req,res)=>{
+
+const {aluno_id,disciplina,nota}=req.body
+
+db.query(
+"INSERT INTO notas(aluno_id,disciplina,nota) VALUES (?,?,?)",
+[aluno_id,disciplina,nota],
+(err,result)=>{
+
+if(err){
+return res.json({success:false})
+}
+
+res.json({success:true})
+
+})
+
+})
+
+
+
+/* =========================
+   BOLETIM
+========================= */
 
 app.get("/boletim/:id",(req,res)=>{
 
@@ -78,29 +165,16 @@ res.json(result)
 
 })
 
-/* CADASTRAR ALUNO */
 
-app.post("/cadastrar-aluno",(req,res)=>{
 
-const {nome,cpf}=req.body
+/* =========================
+   PORTA RENDER
+========================= */
 
-db.query(
-"INSERT INTO alunos (nome,cpf) VALUES (?,?)",
-[nome,cpf],
-(err,result)=>{
+const PORT = process.env.PORT || 3000
 
-if(err){
-return res.json({success:false})
-}
+app.listen(PORT,()=>{
 
-res.json({success:true})
-
-})
-
-})
-
-app.listen(3000,()=>{
-
-console.log("Servidor rodando em http://localhost:3000")
+console.log("🚀 Servidor rodando na porta",PORT)
 
 })
