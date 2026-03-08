@@ -1,44 +1,75 @@
 const express = require("express")
 const mysql = require("mysql2")
 const cors = require("cors")
+const bcrypt = require("bcrypt")
+const jwt = require("jsonwebtoken")
 
 const app = express()
 
 app.use(express.json())
 
 app.use(cors({
-  origin: "*",
-  methods: ["GET","POST","PUT","DELETE"]
+  origin:"*",
+  methods:["GET","POST","PUT","DELETE"]
 }))
 
+const JWT_SECRET = process.env.JWT_SECRET || "segredo_super_forte"
+
 /* =========================
-   CONEXÃO MYSQL (Railway)
+   CONEXÃO MYSQL
 ========================= */
 
 const db = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  ssl:{
-    rejectUnauthorized:false
-  }
+  host:process.env.DB_HOST,
+  port:process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+  user:process.env.DB_USER,
+  password:process.env.DB_PASSWORD,
+  database:process.env.DB_NAME,
+  waitForConnections:true,
+  connectionLimit:10,
+  ssl:{ rejectUnauthorized:false }
 })
 
 db.getConnection((err,conn)=>{
 
 if(err){
-console.error("❌ Erro ao conectar:",err)
+console.error("❌ Erro banco:",err)
 }else{
 console.log("✅ Banco conectado")
 conn.release()
 }
 
 })
+
+/* =========================
+   MIDDLEWARE TOKEN
+========================= */
+
+function verificarToken(req,res,next){
+
+const auth=req.headers.authorization
+
+if(!auth){
+return res.status(401).json({erro:"Token necessário"})
+}
+
+const token=auth.split(" ")[1]
+
+try{
+
+const decoded=jwt.verify(token,JWT_SECRET)
+
+req.usuario=decoded
+
+next()
+
+}catch(err){
+
+return res.status(401).json({erro:"Token inválido"})
+
+}
+
+}
 
 /* =========================
    LOGIN ALUNO
@@ -49,27 +80,33 @@ app.post("/login",(req,res)=>{
 const {cpf,senha}=req.body
 
 db.query(
-"SELECT * FROM alunos WHERE cpf=? AND senha=?",
-[cpf,senha],
-(err,result)=>{
+"SELECT * FROM alunos WHERE cpf=?",
+[cpf],
+async (err,result)=>{
 
-if(err){
-console.error(err)
+if(err || result.length===0){
 return res.json({success:false})
 }
 
-if(result.length>0){
+let aluno=result[0]
+
+const senhaValida = await bcrypt.compare(senha, aluno.senha)
+
+if(!senhaValida){
+return res.json({success:false})
+}
+
+const token = jwt.sign(
+{ id: aluno.id, tipo:"aluno" },
+JWT_SECRET,
+{ expiresIn:"8h" }
+)
 
 res.json({
 success:true,
-aluno:result[0]
+token,
+usuario:aluno
 })
-
-}else{
-
-res.json({success:false})
-
-}
 
 })
 
@@ -84,27 +121,85 @@ app.post("/login-professor",(req,res)=>{
 const {cpf,senha}=req.body
 
 db.query(
-"SELECT * FROM professores WHERE cpf=? AND senha=?",
-[cpf,senha],
-(err,result)=>{
+"SELECT * FROM professores WHERE cpf=?",
+[cpf],
+async (err,result)=>{
+
+if(err || result.length===0){
+return res.json({success:false})
+}
+
+let professor=result[0]
+
+const senhaValida = await bcrypt.compare(senha, professor.senha)
+
+if(!senhaValida){
+return res.json({success:false})
+}
+
+const token = jwt.sign(
+{ id: professor.id, tipo:"professor" },
+JWT_SECRET,
+{ expiresIn:"8h" }
+)
+
+res.json({
+success:true,
+token,
+usuario:professor
+})
+
+})
+
+})
+
+/* =========================
+   CADASTRAR ALUNO
+========================= */
+
+app.post("/aluno",async (req,res)=>{
+
+const {nome,cpf,senha,turma_id}=req.body
+
+const hash = await bcrypt.hash(senha || "1234",10)
+
+db.query(
+"INSERT INTO alunos(nome,cpf,senha,turma_id) VALUES (?,?,?,?)",
+[nome,cpf,hash,turma_id || null],
+(err)=>{
 
 if(err){
 console.error(err)
 return res.json({success:false})
 }
 
-if(result.length>0){
+res.json({success:true})
 
-res.json({
-success:true,
-professor:result[0]
 })
 
-}else{
+})
 
-res.json({success:false})
+/* =========================
+   CADASTRAR PROFESSOR
+========================= */
 
+app.post("/professor",async (req,res)=>{
+
+const {nome,cpf,senha,disciplina}=req.body
+
+const hash = await bcrypt.hash(senha || "1234",10)
+
+db.query(
+"INSERT INTO professores(nome,cpf,senha,disciplina) VALUES (?,?,?,?)",
+[nome,cpf,hash,disciplina],
+(err)=>{
+
+if(err){
+console.error(err)
+return res.json({success:false})
 }
+
+res.json({success:true})
 
 })
 
@@ -118,29 +213,33 @@ app.post("/trocar-senha",(req,res)=>{
 
 const {cpf,senhaAtual,novaSenha,tipo}=req.body
 
-let tabela = tipo === "professor" ? "professores" : "alunos"
+let tabela = tipo==="professor"?"professores":"alunos"
 
 db.query(
-`SELECT * FROM ${tabela} WHERE cpf=? AND senha=?`,
-[cpf,senhaAtual],
-(err,result)=>{
+`SELECT * FROM ${tabela} WHERE cpf=?`,
+[cpf],
+async (err,result)=>{
 
-if(err){
-console.error(err)
+if(result.length===0){
 return res.json({success:false})
 }
 
-if(result.length===0){
-return res.json({success:false,msg:"Senha atual incorreta"})
+let usuario=result[0]
+
+const senhaValida = await bcrypt.compare(senhaAtual, usuario.senha)
+
+if(!senhaValida){
+return res.json({success:false})
 }
+
+const hash = await bcrypt.hash(novaSenha,10)
 
 db.query(
 `UPDATE ${tabela} SET senha=? WHERE cpf=?`,
-[novaSenha,cpf],
+[hash,cpf],
 (err)=>{
 
 if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -160,47 +259,14 @@ app.post("/recuperar-senha",(req,res)=>{
 
 const {cpf,tipo}=req.body
 
-let tabela = tipo === "professor" ? "professores" : "alunos"
+let tabela = tipo==="professor"?"professores":"alunos"
 
 db.query(
 `SELECT * FROM ${tabela} WHERE cpf=?`,
 [cpf],
 (err,result)=>{
 
-if(err){
-console.error(err)
-return res.json({success:false})
-}
-
 if(result.length===0){
-return res.json({success:false})
-}
-
-res.json({
-success:true
-})
-
-})
-
-})
-
-/* =========================
-   REDEFINIR SENHA
-========================= */
-
-app.post("/redefinir-senha",(req,res)=>{
-
-const {cpf,novaSenha,tipo}=req.body
-
-let tabela = tipo === "professor" ? "professores" : "alunos"
-
-db.query(
-`UPDATE ${tabela} SET senha=? WHERE cpf=?`,
-[novaSenha,cpf],
-(err)=>{
-
-if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -211,17 +277,41 @@ res.json({success:true})
 })
 
 /* =========================
-   LISTAR ALUNOS
+   REDEFINIR SENHA
 ========================= */
 
-app.get("/alunos",(req,res)=>{
+app.post("/redefinir-senha",async (req,res)=>{
+
+const {cpf,novaSenha,tipo}=req.body
+
+let tabela = tipo==="professor"?"professores":"alunos"
+
+const hash = await bcrypt.hash(novaSenha,10)
 
 db.query(
-"SELECT * FROM alunos",
-(err,result)=>{
+`UPDATE ${tabela} SET senha=? WHERE cpf=?`,
+[hash,cpf],
+(err)=>{
 
 if(err){
-console.error(err)
+return res.json({success:false})
+}
+
+res.json({success:true})
+
+})
+
+})
+
+/* =========================
+   LISTAR ALUNOS (PROTEGIDO)
+========================= */
+
+app.get("/alunos",verificarToken,(req,res)=>{
+
+db.query("SELECT * FROM alunos",(err,result)=>{
+
+if(err){
 return res.json([])
 }
 
@@ -235,14 +325,11 @@ res.json(result)
    LISTAR PROFESSORES
 ========================= */
 
-app.get("/professores",(req,res)=>{
+app.get("/professores",verificarToken,(req,res)=>{
 
-db.query(
-"SELECT * FROM professores",
-(err,result)=>{
+db.query("SELECT * FROM professores",(err,result)=>{
 
 if(err){
-console.error(err)
 return res.json([])
 }
 
@@ -253,107 +340,10 @@ res.json(result)
 })
 
 /* =========================
-   CADASTRAR ALUNO
-========================= */
-
-app.post("/aluno",(req,res)=>{
-
-const {nome,cpf,senha,turma_id}=req.body
-
-db.query(
-"INSERT INTO alunos(nome,cpf,senha,turma_id) VALUES (?,?,?,?)",
-[nome,cpf,senha || "1234", turma_id || null],
-(err)=>{
-
-if(err){
-console.error(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-/* =========================
-   EDITAR ALUNO
-========================= */
-
-app.put("/aluno/:id",(req,res)=>{
-
-const id=req.params.id
-const {nome,cpf}=req.body
-
-db.query(
-"UPDATE alunos SET nome=?, cpf=? WHERE id=?",
-[nome,cpf,id],
-(err)=>{
-
-if(err){
-console.error(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-/* =========================
-   EXCLUIR ALUNO
-========================= */
-
-app.delete("/aluno/:id",(req,res)=>{
-
-const id=req.params.id
-
-db.query(
-"DELETE FROM alunos WHERE id=?",
-[id],
-(err)=>{
-
-if(err){
-console.error(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-/* =========================
-   CADASTRAR PROFESSOR
-========================= */
-
-app.post("/professor",(req,res)=>{
-
-const {nome,cpf,senha,disciplina}=req.body
-
-db.query(
-"INSERT INTO professores(nome,cpf,senha,disciplina) VALUES (?,?,?,?)",
-[nome,cpf,senha || "1234", disciplina || ""],
-(err)=>{
-
-if(err){
-console.error(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-/* =========================
    REGISTRAR NOTA
 ========================= */
 
-app.post("/nota",(req,res)=>{
+app.post("/nota",verificarToken,(req,res)=>{
 
 const {aluno_id,disciplina,nota}=req.body
 
@@ -363,7 +353,6 @@ db.query(
 (err)=>{
 
 if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -377,7 +366,7 @@ res.json({success:true})
    BOLETIM
 ========================= */
 
-app.get("/boletim/:id",(req,res)=>{
+app.get("/boletim/:id",verificarToken,(req,res)=>{
 
 const id=req.params.id
 
@@ -387,7 +376,6 @@ db.query(
 (err,result)=>{
 
 if(err){
-console.error(err)
 return res.json([])
 }
 
@@ -401,7 +389,7 @@ res.json(result)
    DASHBOARD
 ========================= */
 
-app.get("/dashboard",(req,res)=>{
+app.get("/dashboard",verificarToken,(req,res)=>{
 
 let dados={}
 
@@ -427,24 +415,14 @@ res.json(dados)
 
 })
 
-/* =========================
-   TESTE API
-========================= */
+/* ========================= */
 
 app.get("/",(req,res)=>{
-
-res.send("API Portal Escolar Online")
-
+res.send("API Portal Escolar Seguro")
 })
-
-/* =========================
-   PORTA
-========================= */
 
 const PORT = process.env.PORT || 3000
 
 app.listen(PORT,()=>{
-
 console.log("🚀 Servidor rodando na porta",PORT)
-
 })
