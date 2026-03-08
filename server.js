@@ -9,58 +9,67 @@ app.use(express.json())
 // CORS para Cloudflare Pages acessar o backend
 app.use(cors({
   origin: "*",
-  methods: ["GET","POST"]
+  methods: ["GET", "POST"]
 }))
 
 /* =========================
    CONEXÃO MYSQL (Railway)
+   - usando pool
+   - SSL obrigatório
 ========================= */
 
-const db = mysql.createConnection({
-  host: process.env.DB_HOST || "localhost",
+const db = mysql.createPool({
+  host: process.env.DB_HOST,
   port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "escola"
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  ssl: {
+    rejectUnauthorized: false
+  }
 })
 
-db.connect(err => {
-
+// Testar conexão
+db.getConnection((err, conn) => {
   if (err) {
     console.error("❌ Erro ao conectar no banco:", err)
   } else {
     console.log("✅ Banco conectado")
+    conn.release()
   }
-
 })
 
 /* =========================
    LOGIN ALUNO
 ========================= */
 
-app.post("/login", (req,res)=>{
+app.post("/login", (req, res) => {
 
-  const {cpf, senha} = req.body
+  const { cpf, senha } = req.body
 
   db.query(
     "SELECT * FROM alunos WHERE cpf=? AND senha=?",
-    [cpf,senha],
-    (err,result)=>{
+    [cpf, senha],
+    (err, result) => {
 
-      if(err){
-        return res.json({success:false,error:"Erro no banco"})
+      if (err) {
+        console.error(err)
+        return res.json({ success: false })
       }
 
-      if(result.length>0){
+      if (result.length > 0) {
 
         res.json({
-          success:true,
-          aluno:result[0]
+          success: true,
+          aluno: result[0]
         })
 
-      }else{
+      } else {
 
-        res.json({success:false})
+        res.json({ success: false })
 
       }
 
@@ -73,29 +82,30 @@ app.post("/login", (req,res)=>{
    LOGIN PROFESSOR
 ========================= */
 
-app.post("/login-professor",(req,res)=>{
+app.post("/login-professor", (req, res) => {
 
-  const {cpf,senha} = req.body
+  const { cpf, senha } = req.body
 
   db.query(
     "SELECT * FROM professores WHERE cpf=? AND senha=?",
-    [cpf,senha],
-    (err,result)=>{
+    [cpf, senha],
+    (err, result) => {
 
-      if(err){
-        return res.json({success:false})
+      if (err) {
+        console.error(err)
+        return res.json({ success: false })
       }
 
-      if(result.length>0){
+      if (result.length > 0) {
 
         res.json({
-          success:true,
-          professor:result[0]
+          success: true,
+          professor: result[0]
         })
 
-      }else{
+      } else {
 
-        res.json({success:false})
+        res.json({ success: false })
 
       }
 
@@ -108,13 +118,14 @@ app.post("/login-professor",(req,res)=>{
    LISTAR ALUNOS
 ========================= */
 
-app.get("/alunos",(req,res)=>{
+app.get("/alunos", (req, res) => {
 
   db.query(
     "SELECT * FROM alunos",
-    (err,result)=>{
+    (err, result) => {
 
-      if(err){
+      if (err) {
+        console.error(err)
         return res.json([])
       }
 
@@ -129,16 +140,17 @@ app.get("/alunos",(req,res)=>{
    LISTAR ALUNOS POR TURMA
 ========================= */
 
-app.get("/turma/:turma",(req,res)=>{
+app.get("/turma/:turma", (req, res) => {
 
   const turma = req.params.turma
 
   db.query(
     "SELECT * FROM alunos WHERE turma_id=?",
     [turma],
-    (err,result)=>{
+    (err, result) => {
 
-      if(err){
+      if (err) {
+        console.error(err)
         return res.json([])
       }
 
@@ -153,20 +165,21 @@ app.get("/turma/:turma",(req,res)=>{
    CADASTRAR ALUNO
 ========================= */
 
-app.post("/aluno",(req,res)=>{
+app.post("/aluno", (req, res) => {
 
-  const {nome,cpf,senha,turma_id} = req.body
+  const { nome, cpf, senha, turma_id } = req.body
 
   db.query(
     "INSERT INTO alunos(nome,cpf,senha,turma_id) VALUES (?,?,?,?)",
-    [nome,cpf,senha || "1234", turma_id || null],
-    (err,result)=>{
+    [nome, cpf, senha || "1234", turma_id || null],
+    (err) => {
 
-      if(err){
-        return res.json({success:false,error:"Erro ao cadastrar"})
+      if (err) {
+        console.error(err)
+        return res.json({ success: false })
       }
 
-      res.json({success:true})
+      res.json({ success: true })
 
     }
   )
@@ -177,20 +190,21 @@ app.post("/aluno",(req,res)=>{
    CADASTRAR PROFESSOR
 ========================= */
 
-app.post("/professor",(req,res)=>{
+app.post("/professor", (req, res) => {
 
-  const {nome,cpf,senha,disciplina} = req.body
+  const { nome, cpf, senha, disciplina } = req.body
 
   db.query(
     "INSERT INTO professores(nome,cpf,senha,disciplina) VALUES (?,?,?,?)",
-    [nome,cpf,senha || "1234", disciplina || ""],
-    (err,result)=>{
+    [nome, cpf, senha || "1234", disciplina || ""],
+    (err) => {
 
-      if(err){
-        return res.json({success:false})
+      if (err) {
+        console.error(err)
+        return res.json({ success: false })
       }
 
-      res.json({success:true})
+      res.json({ success: true })
 
     }
   )
@@ -201,20 +215,21 @@ app.post("/professor",(req,res)=>{
    REGISTRAR NOTA
 ========================= */
 
-app.post("/nota",(req,res)=>{
+app.post("/nota", (req, res) => {
 
-  const {aluno_id,disciplina,nota} = req.body
+  const { aluno_id, disciplina, nota } = req.body
 
   db.query(
     "INSERT INTO notas(aluno_id,disciplina,nota) VALUES (?,?,?)",
-    [aluno_id,disciplina,nota],
-    (err,result)=>{
+    [aluno_id, disciplina, nota],
+    (err) => {
 
-      if(err){
-        return res.json({success:false})
+      if (err) {
+        console.error(err)
+        return res.json({ success: false })
       }
 
-      res.json({success:true})
+      res.json({ success: true })
 
     }
   )
@@ -225,16 +240,17 @@ app.post("/nota",(req,res)=>{
    BOLETIM DO ALUNO
 ========================= */
 
-app.get("/boletim/:id",(req,res)=>{
+app.get("/boletim/:id", (req, res) => {
 
   const id = req.params.id
 
   db.query(
     "SELECT disciplina,nota FROM notas WHERE aluno_id=?",
     [id],
-    (err,result)=>{
+    (err, result) => {
 
-      if(err){
+      if (err) {
+        console.error(err)
         return res.json([])
       }
 
@@ -246,10 +262,10 @@ app.get("/boletim/:id",(req,res)=>{
 })
 
 /* =========================
-   TESTE DA API
+   TESTE API
 ========================= */
 
-app.get("/",(req,res)=>{
+app.get("/", (req, res) => {
 
   res.send("API Portal Escolar Online")
 
@@ -261,8 +277,8 @@ app.get("/",(req,res)=>{
 
 const PORT = process.env.PORT || 3000
 
-app.listen(PORT,()=>{
+app.listen(PORT, () => {
 
-  console.log("🚀 Servidor rodando na porta",PORT)
+  console.log("🚀 Servidor rodando na porta", PORT)
 
 })
