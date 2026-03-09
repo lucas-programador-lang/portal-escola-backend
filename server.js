@@ -85,7 +85,6 @@ db.query(
 async (err,result)=>{
 
 if(err || result.length===0){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -127,7 +126,6 @@ db.query(
 async (err,result)=>{
 
 if(err || result.length===0){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -235,108 +233,6 @@ res.json({success:true})
 })
 
 /* =========================
-   TROCAR SENHA
-========================= */
-
-app.post("/trocar-senha",(req,res)=>{
-
-const {cpf,senhaAtual,novaSenha,tipo}=req.body
-
-let tabela = tipo==="professor" ? "professores" : "alunos"
-
-db.query(
-`SELECT * FROM ${tabela} WHERE cpf=?`,
-[cpf],
-async (err,result)=>{
-
-if(err || result.length===0){
-console.error(err)
-return res.json({success:false})
-}
-
-let usuario=result[0]
-
-const senhaValida = await bcrypt.compare(senhaAtual, usuario.senha)
-
-if(!senhaValida){
-return res.json({success:false})
-}
-
-const hash = await bcrypt.hash(novaSenha,10)
-
-db.query(
-`UPDATE ${tabela} SET senha=? WHERE cpf=?`,
-[hash,cpf],
-(err)=>{
-
-if(err){
-console.error(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-})
-
-/* =========================
-   RECUPERAR SENHA
-========================= */
-
-app.post("/recuperar-senha",(req,res)=>{
-
-const {cpf,tipo}=req.body
-
-let tabela = tipo==="professor" ? "professores" : "alunos"
-
-db.query(
-`SELECT * FROM ${tabela} WHERE cpf=?`,
-[cpf],
-(err,result)=>{
-
-if(err || result.length===0){
-console.error(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-/* =========================
-   REDEFINIR SENHA
-========================= */
-
-app.post("/redefinir-senha",async (req,res)=>{
-
-const {cpf,novaSenha,tipo}=req.body
-
-let tabela = tipo==="professor" ? "professores" : "alunos"
-
-const hash = await bcrypt.hash(novaSenha,10)
-
-db.query(
-`UPDATE ${tabela} SET senha=? WHERE cpf=?`,
-[hash,cpf],
-(err)=>{
-
-if(err){
-console.error(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-/* =========================
    LISTAR ALUNOS
 ========================= */
 
@@ -345,7 +241,6 @@ app.get("/alunos",verificarToken,(req,res)=>{
 db.query("SELECT * FROM alunos",(err,result)=>{
 
 if(err){
-console.error(err)
 return res.json([])
 }
 
@@ -364,7 +259,6 @@ app.get("/professores",verificarToken,(req,res)=>{
 db.query("SELECT * FROM professores",(err,result)=>{
 
 if(err){
-console.error(err)
 return res.json([])
 }
 
@@ -388,7 +282,6 @@ db.query(
 (err)=>{
 
 if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -412,7 +305,6 @@ db.query(
 (err,result)=>{
 
 if(err){
-console.error(err)
 return res.json([])
 }
 
@@ -432,28 +324,13 @@ let dados={}
 
 db.query("SELECT COUNT(*) total FROM alunos",(err,r1)=>{
 
-if(err){
-console.error(err)
-return res.json({})
-}
-
 dados.alunos=r1[0].total
 
 db.query("SELECT COUNT(*) total FROM professores",(err,r2)=>{
 
-if(err){
-console.error(err)
-return res.json({})
-}
-
 dados.professores=r2[0].total
 
 db.query("SELECT COUNT(*) total FROM notas",(err,r3)=>{
-
-if(err){
-console.error(err)
-return res.json({})
-}
 
 dados.notas=r3[0].total
 
@@ -462,6 +339,75 @@ res.json(dados)
 })
 
 })
+
+})
+
+})
+
+/* =========================
+   CRIAR PUBLICAÇÃO
+========================= */
+
+app.post("/publicacao",verificarToken,(req,res)=>{
+
+const {titulo,conteudo,imagem,tipo}=req.body
+
+db.query(
+"INSERT INTO publicacoes(titulo,conteudo,imagem,tipo) VALUES (?,?,?,?)",
+[titulo,conteudo,imagem || "",tipo],
+(err)=>{
+
+if(err){
+console.error(err)
+return res.json({success:false})
+}
+
+res.json({success:true})
+
+})
+
+})
+
+/* =========================
+   LISTAR PUBLICAÇÕES
+========================= */
+
+app.get("/publicacoes",(req,res)=>{
+
+db.query(
+"SELECT * FROM publicacoes ORDER BY data_publicacao DESC",
+(err,result)=>{
+
+if(err){
+console.error(err)
+return res.json([])
+}
+
+res.json(result)
+
+})
+
+})
+
+/* =========================
+   EXCLUIR PUBLICAÇÃO
+========================= */
+
+app.delete("/publicacao/:id",verificarToken,(req,res)=>{
+
+const id=req.params.id
+
+db.query(
+"DELETE FROM publicacoes WHERE id=?",
+[id],
+(err)=>{
+
+if(err){
+console.error(err)
+return res.json({success:false})
+}
+
+res.json({success:true})
 
 })
 
