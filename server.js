@@ -3,46 +3,84 @@ const mysql = require("mysql2")
 const cors = require("cors")
 const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
+const multer = require("multer")
+const path = require("path")
+const fs = require("fs")
 
 const app = express()
 
 app.use(express.json())
 
 app.use(cors({
-  origin: "*",
-  methods: ["GET","POST","PUT","DELETE"]
+origin:"*",
+methods:["GET","POST","PUT","DELETE"]
 }))
 
 const JWT_SECRET = process.env.JWT_SECRET || "segredo_super_forte"
 
+
+
 /* =========================
-   CONEXÃO MYSQL
+UPLOAD DE IMAGEM
+========================= */
+
+const uploadPath = path.join(__dirname,"uploads")
+
+if(!fs.existsSync(uploadPath)){
+fs.mkdirSync(uploadPath)
+}
+
+const storage = multer.diskStorage({
+
+destination:(req,file,cb)=>{
+cb(null,uploadPath)
+},
+
+filename:(req,file,cb)=>{
+const nome = Date.now()+"-"+file.originalname
+cb(null,nome)
+}
+
+})
+
+const upload = multer({storage})
+
+app.use("/uploads",express.static(uploadPath))
+
+
+
+/* =========================
+CONEXÃO MYSQL
 ========================= */
 
 const db = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-  ssl: { rejectUnauthorized:false }
+
+host:process.env.DB_HOST,
+port:process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+user:process.env.DB_USER,
+password:process.env.DB_PASSWORD,
+database:process.env.DB_NAME,
+waitForConnections:true,
+connectionLimit:10,
+ssl:{rejectUnauthorized:false}
+
 })
 
 db.getConnection((err,conn)=>{
 
 if(err){
-console.error("❌ Erro banco:",err)
+console.error("Erro banco:",err)
 }else{
-console.log("✅ Banco conectado")
+console.log("Banco conectado")
 conn.release()
 }
 
 })
 
+
+
 /* =========================
-   MIDDLEWARE TOKEN
+MIDDLEWARE TOKEN
 ========================= */
 
 function verificarToken(req,res,next){
@@ -71,8 +109,31 @@ return res.status(401).json({erro:"Token inválido"})
 
 }
 
+
+
 /* =========================
-   LOGIN ALUNO
+UPLOAD IMAGEM
+========================= */
+
+app.post("/upload",verificarToken,upload.single("imagem"),(req,res)=>{
+
+if(!req.file){
+return res.json({success:false})
+}
+
+const url = req.protocol + "://" + req.get("host") + "/uploads/" + req.file.filename
+
+res.json({
+success:true,
+url
+})
+
+})
+
+
+
+/* =========================
+LOGIN ALUNO
 ========================= */
 
 app.post("/login",(req,res)=>{
@@ -112,8 +173,10 @@ usuario:aluno
 
 })
 
+
+
 /* =========================
-   LOGIN PROFESSOR
+LOGIN PROFESSOR
 ========================= */
 
 app.post("/login-professor",(req,res)=>{
@@ -153,8 +216,10 @@ usuario:professor
 
 })
 
+
+
 /* =========================
-   LOGIN ADMIN
+LOGIN ADMIN
 ========================= */
 
 app.post("/login-admin",(req,res)=>{
@@ -180,8 +245,10 @@ res.json({success:false})
 
 })
 
+
+
 /* =========================
-   CADASTRAR ALUNO
+CADASTRAR ALUNO
 ========================= */
 
 app.post("/aluno",async (req,res)=>{
@@ -196,7 +263,6 @@ db.query(
 (err)=>{
 
 if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -206,8 +272,10 @@ res.json({success:true})
 
 })
 
+
+
 /* =========================
-   CADASTRAR PROFESSOR
+CADASTRAR PROFESSOR
 ========================= */
 
 app.post("/professor",async (req,res)=>{
@@ -222,7 +290,6 @@ db.query(
 (err)=>{
 
 if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -232,8 +299,10 @@ res.json({success:true})
 
 })
 
+
+
 /* =========================
-   LISTAR ALUNOS
+LISTAR ALUNOS
 ========================= */
 
 app.get("/alunos",verificarToken,(req,res)=>{
@@ -250,8 +319,10 @@ res.json(result)
 
 })
 
+
+
 /* =========================
-   LISTAR PROFESSORES
+LISTAR PROFESSORES
 ========================= */
 
 app.get("/professores",verificarToken,(req,res)=>{
@@ -268,8 +339,10 @@ res.json(result)
 
 })
 
+
+
 /* =========================
-   REGISTRAR NOTA
+REGISTRAR NOTA
 ========================= */
 
 app.post("/nota",verificarToken,(req,res)=>{
@@ -291,8 +364,10 @@ res.json({success:true})
 
 })
 
+
+
 /* =========================
-   BOLETIM
+BOLETIM
 ========================= */
 
 app.get("/boletim/:id",verificarToken,(req,res)=>{
@@ -314,8 +389,10 @@ res.json(result)
 
 })
 
+
+
 /* =========================
-   DASHBOARD
+DASHBOARD
 ========================= */
 
 app.get("/dashboard",verificarToken,(req,res)=>{
@@ -344,8 +421,10 @@ res.json(dados)
 
 })
 
+
+
 /* =========================
-   CRIAR PUBLICAÇÃO
+CRIAR PUBLICAÇÃO
 ========================= */
 
 app.post("/publicacao",verificarToken,(req,res)=>{
@@ -358,7 +437,6 @@ db.query(
 (err)=>{
 
 if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -368,8 +446,10 @@ res.json({success:true})
 
 })
 
+
+
 /* =========================
-   LISTAR PUBLICAÇÕES
+LISTAR PUBLICAÇÕES
 ========================= */
 
 app.get("/publicacoes",(req,res)=>{
@@ -379,7 +459,6 @@ db.query(
 (err,result)=>{
 
 if(err){
-console.error(err)
 return res.json([])
 }
 
@@ -389,8 +468,10 @@ res.json(result)
 
 })
 
+
+
 /* =========================
-   EXCLUIR PUBLICAÇÃO
+EXCLUIR PUBLICAÇÃO
 ========================= */
 
 app.delete("/publicacao/:id",verificarToken,(req,res)=>{
@@ -403,7 +484,6 @@ db.query(
 (err)=>{
 
 if(err){
-console.error(err)
 return res.json({success:false})
 }
 
@@ -412,6 +492,8 @@ res.json({success:true})
 })
 
 })
+
+
 
 /* ========================= */
 
@@ -422,5 +504,5 @@ res.send("API Portal Escolar Seguro")
 const PORT = process.env.PORT || 3000
 
 app.listen(PORT,()=>{
-console.log("🚀 Servidor rodando na porta",PORT)
+console.log("Servidor rodando na porta",PORT)
 })
