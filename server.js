@@ -156,6 +156,33 @@ usuario:professor
 })
 
 /* =========================
+   LOGIN ADMIN
+========================= */
+
+app.post("/login-admin",(req,res)=>{
+
+const {usuario,senha}=req.body
+
+if(usuario==="admin" && senha==="123456"){
+
+const token = jwt.sign(
+{ tipo:"admin" },
+JWT_SECRET,
+{ expiresIn:"8h" }
+)
+
+return res.json({
+success:true,
+token
+})
+
+}
+
+res.json({success:false})
+
+})
+
+/* =========================
    CADASTRAR ALUNO
 ========================= */
 
@@ -310,7 +337,7 @@ res.json({success:true})
 })
 
 /* =========================
-   LISTAR ALUNOS (PROTEGIDO)
+   LISTAR ALUNOS
 ========================= */
 
 app.get("/alunos",verificarToken,(req,res)=>{
