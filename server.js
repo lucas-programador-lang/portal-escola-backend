@@ -11,13 +11,20 @@ const app = express()
 
 app.use(express.json())
 
-app.use(cors({
-origin:"*",
-methods:["GET","POST","PUT","DELETE"]
-}))
+/* =========================
+CORS CORRIGIDO
+========================= */
+
+const corsOptions = {
+origin: "*",
+methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+allowedHeaders: ["Content-Type","Authorization"]
+}
+
+app.use(cors(corsOptions))
+app.options("*", cors(corsOptions))
 
 const JWT_SECRET = process.env.JWT_SECRET || "segredo_super_forte"
-
 
 
 /* =========================
@@ -48,21 +55,19 @@ const upload = multer({storage})
 app.use("/uploads",express.static(uploadPath))
 
 
-
 /* =========================
 CONEXÃO MYSQL
 ========================= */
 
 const db = mysql.createPool({
 
-host:process.env.DB_HOST,
-port:process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-user:process.env.DB_USER,
-password:process.env.DB_PASSWORD,
-database:process.env.DB_NAME,
-waitForConnections:true,
-connectionLimit:10,
-ssl:{rejectUnauthorized:false}
+host: process.env.DB_HOST || "localhost",
+port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+user: process.env.DB_USER,
+password: process.env.DB_PASSWORD,
+database: process.env.DB_NAME,
+waitForConnections: true,
+connectionLimit: 10
 
 })
 
@@ -76,7 +81,6 @@ conn.release()
 }
 
 })
-
 
 
 /* =========================
@@ -110,7 +114,6 @@ return res.status(401).json({erro:"Token inválido"})
 }
 
 
-
 /* =========================
 UPLOAD IMAGEM
 ========================= */
@@ -129,7 +132,6 @@ url
 })
 
 })
-
 
 
 /* =========================
@@ -174,7 +176,6 @@ usuario:aluno
 })
 
 
-
 /* =========================
 LOGIN PROFESSOR
 ========================= */
@@ -217,7 +218,6 @@ usuario:professor
 })
 
 
-
 /* =========================
 LOGIN ADMIN
 ========================= */
@@ -246,7 +246,6 @@ res.json({success:false})
 })
 
 
-
 /* =========================
 CADASTRAR ALUNO
 ========================= */
@@ -263,6 +262,7 @@ db.query(
 (err)=>{
 
 if(err){
+console.log(err)
 return res.json({success:false})
 }
 
@@ -271,7 +271,6 @@ res.json({success:true})
 })
 
 })
-
 
 
 /* =========================
@@ -290,6 +289,7 @@ db.query(
 (err)=>{
 
 if(err){
+console.log(err)
 return res.json({success:false})
 }
 
@@ -298,7 +298,6 @@ res.json({success:true})
 })
 
 })
-
 
 
 /* =========================
@@ -320,7 +319,6 @@ res.json(result)
 })
 
 
-
 /* =========================
 LISTAR PROFESSORES
 ========================= */
@@ -338,7 +336,6 @@ res.json(result)
 })
 
 })
-
 
 
 /* =========================
@@ -365,7 +362,6 @@ res.json({success:true})
 })
 
 
-
 /* =========================
 BOLETIM
 ========================= */
@@ -388,7 +384,6 @@ res.json(result)
 })
 
 })
-
 
 
 /* =========================
@@ -422,7 +417,6 @@ res.json(dados)
 })
 
 
-
 /* =========================
 CRIAR PUBLICAÇÃO
 ========================= */
@@ -447,7 +441,6 @@ res.json({success:true})
 })
 
 
-
 /* =========================
 LISTAR PUBLICAÇÕES
 ========================= */
@@ -467,7 +460,6 @@ res.json(result)
 })
 
 })
-
 
 
 /* =========================
@@ -492,7 +484,6 @@ res.json({success:true})
 })
 
 })
-
 
 
 /* ========================= */
