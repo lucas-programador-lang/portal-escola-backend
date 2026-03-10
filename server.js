@@ -55,6 +55,21 @@ const upload = multer({storage})
 
 app.use("/uploads",express.static(uploadPath))
 
+/* ROTA DE UPLOAD */
+
+app.post("/upload",verificarToken,upload.single("imagem"),(req,res)=>{
+
+if(!req.file){
+return res.json({success:false})
+}
+
+res.json({
+success:true,
+url: req.protocol + "://" + req.get("host") + "/uploads/" + req.file.filename
+})
+
+})
+
 /* =========================
 MYSQL
 ========================= */
@@ -250,6 +265,10 @@ let {nome,cpf,senha}=req.body
 
 cpf = cpf.replace(/\D/g,'')
 
+if(!nome || !cpf){
+return res.json({success:false})
+}
+
 db.query(
 "SELECT id FROM alunos WHERE cpf=?",
 [cpf],
@@ -288,6 +307,10 @@ app.post("/professor",verificarToken,async (req,res)=>{
 let {nome,cpf,senha,disciplina}=req.body
 
 cpf = cpf.replace(/\D/g,'')
+
+if(!nome || !cpf || !disciplina){
+return res.json({success:false})
+}
 
 db.query(
 "SELECT id FROM professores WHERE cpf=?",
@@ -355,6 +378,10 @@ PUBLICAÇÕES
 app.post("/publicacao",verificarToken,(req,res)=>{
 
 const {titulo,conteudo,imagem,tipo}=req.body
+
+if(!titulo || !tipo){
+return res.json({success:false})
+}
 
 db.query(
 "INSERT INTO publicacoes(titulo,conteudo,imagem,tipo) VALUES (?,?,?,?)",
