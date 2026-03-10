@@ -256,10 +256,7 @@ db.query(
 async (err,result)=>{
 
 if(result.length > 0){
-return res.json({
-success:false,
-erro:"CPF já cadastrado"
-})
+return res.json({success:false,erro:"CPF já cadastrado"})
 }
 
 const hash=await bcrypt.hash(senha || "1234",10)
@@ -298,10 +295,7 @@ db.query(
 async (err,result)=>{
 
 if(result.length > 0){
-return res.json({
-success:false,
-erro:"CPF já cadastrado"
-})
+return res.json({success:false,erro:"CPF já cadastrado"})
 }
 
 const hash=await bcrypt.hash(senha || "1234",10)
@@ -317,6 +311,36 @@ return res.json({success:false})
 }
 
 res.json({success:true})
+
+})
+
+})
+
+})
+
+/* =========================
+DASHBOARD
+========================= */
+
+app.get("/dashboard",verificarToken,(req,res)=>{
+
+let dados={}
+
+db.query("SELECT COUNT(*) total FROM alunos",(err,r1)=>{
+
+dados.alunos=r1?.[0]?.total || 0
+
+db.query("SELECT COUNT(*) total FROM professores",(err,r2)=>{
+
+dados.professores=r2?.[0]?.total || 0
+
+db.query("SELECT COUNT(*) total FROM publicacoes",(err,r3)=>{
+
+dados.publicacoes=r3?.[0]?.total || 0
+
+res.json(dados)
+
+})
 
 })
 
