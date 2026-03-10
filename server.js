@@ -160,7 +160,9 @@ LOGIN ALUNO
 
 app.post("/login-aluno",(req,res)=>{
 
-const {cpf,senha}=req.body
+let {cpf,senha}=req.body
+
+cpf = cpf.replace(/\D/g,'')
 
 db.query(
 "SELECT * FROM alunos WHERE cpf=?",
@@ -201,7 +203,9 @@ LOGIN PROFESSOR
 
 app.post("/login-professor",(req,res)=>{
 
-const {cpf,senha}=req.body
+let {cpf,senha}=req.body
+
+cpf = cpf.replace(/\D/g,'')
 
 db.query(
 "SELECT * FROM professores WHERE cpf=?",
@@ -242,15 +246,27 @@ CADASTRAR ALUNO
 
 app.post("/aluno",verificarToken,async (req,res)=>{
 
-const {nome,cpf,senha}=req.body
+let {nome,cpf,senha}=req.body
 
-try{
+cpf = cpf.replace(/\D/g,'')
+
+db.query(
+"SELECT id FROM alunos WHERE cpf=?",
+[cpf],
+async (err,result)=>{
+
+if(result.length > 0){
+return res.json({
+success:false,
+erro:"CPF já cadastrado"
+})
+}
 
 const hash=await bcrypt.hash(senha || "1234",10)
 
 db.query(
 "INSERT INTO alunos(nome,cpf,senha) VALUES (?,?,?)",
-[nome,cpf.replace(/\D/g,''),hash],
+[nome,cpf,hash],
 (err)=>{
 
 if(err){
@@ -262,9 +278,7 @@ res.json({success:true})
 
 })
 
-}catch{
-res.json({success:false})
-}
+})
 
 })
 
@@ -274,19 +288,27 @@ CADASTRAR PROFESSOR
 
 app.post("/professor",verificarToken,async (req,res)=>{
 
-const {nome,cpf,senha,disciplina}=req.body
+let {nome,cpf,senha,disciplina}=req.body
 
-if(!nome || !cpf || !disciplina){
-return res.json({success:false})
+cpf = cpf.replace(/\D/g,'')
+
+db.query(
+"SELECT id FROM professores WHERE cpf=?",
+[cpf],
+async (err,result)=>{
+
+if(result.length > 0){
+return res.json({
+success:false,
+erro:"CPF já cadastrado"
+})
 }
-
-try{
 
 const hash=await bcrypt.hash(senha || "1234",10)
 
 db.query(
 "INSERT INTO professores(nome,cpf,senha,disciplina) VALUES (?,?,?,?)",
-[nome,cpf.replace(/\D/g,''),hash,disciplina],
+[nome,cpf,hash,disciplina],
 (err)=>{
 
 if(err){
@@ -298,9 +320,7 @@ res.json({success:true})
 
 })
 
-}catch{
-res.json({success:false})
-}
+})
 
 })
 
