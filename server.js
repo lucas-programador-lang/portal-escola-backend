@@ -40,15 +40,12 @@ fs.mkdirSync(uploadPath)
 }
 
 const storage = multer.diskStorage({
-
 destination:(req,file,cb)=>{
 cb(null,uploadPath)
 },
-
 filename:(req,file,cb)=>{
 cb(null,Date.now()+"-"+file.originalname)
 }
-
 })
 
 const upload = multer({storage})
@@ -56,7 +53,7 @@ const upload = multer({storage})
 app.use("/uploads",express.static(uploadPath))
 
 /* =========================
-MYSQL PROFISSIONAL
+MYSQL
 ========================= */
 
 let db
@@ -90,14 +87,12 @@ connectionLimit:10
 }
 
 db.getConnection((err,conn)=>{
-
 if(err){
 console.log("❌ Erro banco:",err)
 }else{
 console.log("✅ Banco conectado")
 conn.release()
 }
-
 })
 
 }
@@ -121,15 +116,11 @@ const token = auth.split(" ")[1]
 try{
 
 const decoded = jwt.verify(token,JWT_SECRET)
-
 req.usuario = decoded
-
 next()
 
 }catch(err){
-
 return res.status(401).json({erro:"Token inválido"})
-
 }
 
 }
@@ -171,6 +162,47 @@ return res.json({success:true,token})
 }
 
 res.json({success:false})
+
+})
+
+/* =========================
+LOGIN PROFESSOR
+========================= */
+
+app.post("/login-professor",(req,res)=>{
+
+const {cpf,senha}=req.body
+
+db.query(
+"SELECT * FROM professores WHERE cpf=?",
+[cpf],
+async (err,result)=>{
+
+if(err || result.length===0){
+return res.json({success:false})
+}
+
+const professor=result[0]
+
+const senhaValida = await bcrypt.compare(senha,professor.senha)
+
+if(!senhaValida){
+return res.json({success:false})
+}
+
+const token = jwt.sign(
+{ id: professor.id, tipo:"professor" },
+JWT_SECRET,
+{expiresIn:"8h"}
+)
+
+res.json({
+success:true,
+token,
+professor
+})
+
+})
 
 })
 
