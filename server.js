@@ -16,12 +16,12 @@ CORS
 ========================= */
 
 app.use(cors({
-origin: "*",
-methods: ["GET","POST","PUT","DELETE","OPTIONS"],
-allowedHeaders: ["Content-Type","Authorization"]
+origin:"*",
+methods:["GET","POST","PUT","DELETE","OPTIONS"],
+allowedHeaders:["Content-Type","Authorization"]
 }))
 
-app.options("*", cors())
+app.options("*",cors())
 
 /* =========================
 JWT
@@ -40,12 +40,15 @@ fs.mkdirSync(uploadPath)
 }
 
 const storage = multer.diskStorage({
+
 destination:(req,file,cb)=>{
 cb(null,uploadPath)
 },
+
 filename:(req,file,cb)=>{
 cb(null,Date.now()+"-"+file.originalname)
 }
+
 })
 
 const upload = multer({storage})
@@ -65,34 +68,36 @@ if(process.env.DATABASE_URL){
 const url = new URL(process.env.DATABASE_URL)
 
 db = mysql.createPool({
-host: url.hostname,
-user: url.username,
-password: url.password,
-database: url.pathname.replace("/",""),
-port: url.port,
+host:url.hostname,
+user:url.username,
+password:url.password,
+database:url.pathname.replace("/",""),
+port:url.port,
 connectionLimit:10
 })
 
 }else{
 
 db = mysql.createPool({
-host: process.env.DB_HOST,
-user: process.env.DB_USER,
-password: process.env.DB_PASSWORD,
-database: process.env.DB_NAME,
-port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+host:process.env.DB_HOST,
+user:process.env.DB_USER,
+password:process.env.DB_PASSWORD,
+database:process.env.DB_NAME,
+port:process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
 connectionLimit:10
 })
 
 }
 
 db.getConnection((err,conn)=>{
+
 if(err){
 console.log("❌ Erro banco:",err)
 }else{
 console.log("✅ Banco conectado")
 conn.release()
 }
+
 })
 
 }
@@ -100,46 +105,34 @@ conn.release()
 conectarBanco()
 
 /* =========================
-MIDDLEWARE TOKEN
+TOKEN
 ========================= */
 
 function verificarToken(req,res,next){
 
-const auth = req.headers.authorization
+const auth=req.headers.authorization
 
 if(!auth){
 return res.status(401).json({erro:"Token necessário"})
 }
 
-const token = auth.split(" ")[1]
+const token=auth.split(" ")[1]
 
 try{
 
-const decoded = jwt.verify(token,JWT_SECRET)
-req.usuario = decoded
+const decoded=jwt.verify(token,JWT_SECRET)
+
+req.usuario=decoded
+
 next()
 
-}catch(err){
+}catch{
+
 return res.status(401).json({erro:"Token inválido"})
-}
 
 }
 
-/* =========================
-UPLOAD IMAGEM
-========================= */
-
-app.post("/upload",verificarToken,upload.single("imagem"),(req,res)=>{
-
-if(!req.file){
-return res.json({success:false})
 }
-
-const url = req.protocol + "://" + req.get("host") + "/uploads/" + req.file.filename
-
-res.json({success:true,url})
-
-})
 
 /* =========================
 LOGIN ADMIN
@@ -151,17 +144,54 @@ const {usuario,senha}=req.body
 
 if(usuario==="admin" && senha==="123456"){
 
-const token = jwt.sign(
-{tipo:"admin"},
-JWT_SECRET,
-{expiresIn:"8h"}
-)
+const token=jwt.sign({tipo:"admin"},JWT_SECRET,{expiresIn:"8h"})
 
 return res.json({success:true,token})
 
 }
 
 res.json({success:false})
+
+})
+
+/* =========================
+LOGIN ALUNO
+========================= */
+
+app.post("/login-aluno",(req,res)=>{
+
+const {cpf,senha}=req.body
+
+db.query(
+"SELECT * FROM alunos WHERE cpf=?",
+[cpf],
+async (err,result)=>{
+
+if(err || result.length===0){
+return res.json({success:false})
+}
+
+const aluno=result[0]
+
+const senhaValida=await bcrypt.compare(senha,aluno.senha)
+
+if(!senhaValida){
+return res.json({success:false})
+}
+
+const token=jwt.sign(
+{id:aluno.id,tipo:"aluno"},
+JWT_SECRET,
+{expiresIn:"8h"}
+)
+
+res.json({
+success:true,
+token,
+aluno
+})
+
+})
 
 })
 
@@ -184,14 +214,14 @@ return res.json({success:false})
 
 const professor=result[0]
 
-const senhaValida = await bcrypt.compare(senha,professor.senha)
+const senhaValida=await bcrypt.compare(senha,professor.senha)
 
 if(!senhaValida){
 return res.json({success:false})
 }
 
-const token = jwt.sign(
-{ id: professor.id, tipo:"professor" },
+const token=jwt.sign(
+{id:professor.id,tipo:"professor"},
 JWT_SECRET,
 {expiresIn:"8h"}
 )
@@ -207,20 +237,20 @@ professor
 })
 
 /* =========================
-ALUNOS
+CADASTRAR ALUNO
 ========================= */
 
 app.post("/aluno",verificarToken,async (req,res)=>{
 
+const {nome,cpf,senha}=req.body
+
 try{
 
-const {nome,cpf,senha,turma_id}=req.body
-
-const hash = await bcrypt.hash(senha || "1234",10)
+const hash=await bcrypt.hash(senha || "1234",10)
 
 db.query(
-"INSERT INTO alunos(nome,cpf,senha,turma_id) VALUES (?,?,?,?)",
-[nome,cpf,hash,turma_id || null],
+"INSERT INTO alunos(nome,cpf,senha) VALUES (?,?,?)",
+[nome,cpf.replace(/\D/g,''),hash],
 (err)=>{
 
 if(err){
@@ -239,20 +269,24 @@ res.json({success:false})
 })
 
 /* =========================
-PROFESSORES
+CADASTRAR PROFESSOR
 ========================= */
 
 app.post("/professor",verificarToken,async (req,res)=>{
 
-try{
-
 const {nome,cpf,senha,disciplina}=req.body
 
-const hash = await bcrypt.hash(senha || "1234",10)
+if(!nome || !cpf || !disciplina){
+return res.json({success:false})
+}
+
+try{
+
+const hash=await bcrypt.hash(senha || "1234",10)
 
 db.query(
 "INSERT INTO professores(nome,cpf,senha,disciplina) VALUES (?,?,?,?)",
-[nome,cpf,hash,disciplina],
+[nome,cpf.replace(/\D/g,''),hash,disciplina],
 (err)=>{
 
 if(err){
@@ -271,46 +305,12 @@ res.json({success:false})
 })
 
 /* =========================
-DASHBOARD
-========================= */
-
-app.get("/dashboard",verificarToken,(req,res)=>{
-
-let dados={}
-
-db.query("SELECT COUNT(*) total FROM alunos",(err,r1)=>{
-
-dados.alunos=r1?.[0]?.total || 0
-
-db.query("SELECT COUNT(*) total FROM professores",(err,r2)=>{
-
-dados.professores=r2?.[0]?.total || 0
-
-db.query("SELECT COUNT(*) total FROM notas",(err,r3)=>{
-
-dados.notas=r3?.[0]?.total || 0
-
-res.json(dados)
-
-})
-
-})
-
-})
-
-})
-
-/* =========================
-CRIAR PUBLICAÇÃO
+PUBLICAÇÕES
 ========================= */
 
 app.post("/publicacao",verificarToken,(req,res)=>{
 
 const {titulo,conteudo,imagem,tipo}=req.body
-
-if(!titulo || !tipo){
-return res.json({success:false})
-}
 
 db.query(
 "INSERT INTO publicacoes(titulo,conteudo,imagem,tipo) VALUES (?,?,?,?)",
@@ -328,10 +328,6 @@ res.json({success:true})
 
 })
 
-/* =========================
-LISTAR PUBLICAÇÕES
-========================= */
-
 app.get("/publicacoes",(req,res)=>{
 
 db.query(
@@ -339,7 +335,6 @@ db.query(
 (err,result)=>{
 
 if(err){
-console.log(err)
 return res.json([])
 }
 
@@ -349,17 +344,11 @@ res.json(result)
 
 })
 
-/* =========================
-EXCLUIR PUBLICAÇÃO
-========================= */
-
 app.delete("/publicacao/:id",verificarToken,(req,res)=>{
-
-const id=req.params.id
 
 db.query(
 "DELETE FROM publicacoes WHERE id=?",
-[id],
+[req.params.id],
 (err)=>{
 
 if(err){
