@@ -12,7 +12,7 @@ const app = express()
 app.use(express.json())
 
 /* =========================
-CORS PROFISSIONAL
+CORS
 ========================= */
 
 app.use(cors({
@@ -23,7 +23,9 @@ allowedHeaders: ["Content-Type","Authorization"]
 
 app.options("*", cors())
 
-/* ========================= */
+/* =========================
+JWT
+========================= */
 
 const JWT_SECRET = process.env.JWT_SECRET || "segredo_super_forte"
 
@@ -54,30 +56,53 @@ const upload = multer({storage})
 app.use("/uploads",express.static(uploadPath))
 
 /* =========================
-MYSQL
+MYSQL PROFISSIONAL
 ========================= */
 
-const db = mysql.createPool({
+let db
 
+function conectarBanco(){
+
+if(process.env.DATABASE_URL){
+
+const url = new URL(process.env.DATABASE_URL)
+
+db = mysql.createPool({
+host: url.hostname,
+user: url.username,
+password: url.password,
+database: url.pathname.replace("/",""),
+port: url.port,
+connectionLimit:10
+})
+
+}else{
+
+db = mysql.createPool({
 host: process.env.DB_HOST,
 user: process.env.DB_USER,
 password: process.env.DB_PASSWORD,
 database: process.env.DB_NAME,
 port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
 connectionLimit:10
-
 })
+
+}
 
 db.getConnection((err,conn)=>{
 
 if(err){
-console.log("Erro banco:",err)
+console.log("❌ Erro banco:",err)
 }else{
-console.log("Banco conectado")
+console.log("✅ Banco conectado")
 conn.release()
 }
 
 })
+
+}
+
+conectarBanco()
 
 /* =========================
 MIDDLEWARE TOKEN
@@ -282,6 +307,7 @@ db.query(
 (err,result)=>{
 
 if(err){
+console.log(err)
 return res.json([])
 }
 
@@ -323,5 +349,5 @@ res.send("API Portal Escolar Seguro")
 const PORT = process.env.PORT || 3000
 
 app.listen(PORT,()=>{
-console.log("Servidor rodando na porta",PORT)
+console.log("🚀 Servidor rodando na porta",PORT)
 })
