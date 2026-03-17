@@ -1,3 +1,5 @@
+require("dotenv").config()
+
 const express = require("express")
 const mysql = require("mysql2")
 const cors = require("cors")
@@ -9,10 +11,6 @@ const fs = require("fs")
 
 const app = express()
 app.use(express.json())
-
-/* =========================
-CORS
-========================= */
 app.use(cors())
 
 /* =========================
@@ -30,6 +28,7 @@ const storage = multer.diskStorage({
   destination:(req,file,cb)=> cb(null,uploadPath),
   filename:(req,file,cb)=> cb(null,Date.now()+"-"+file.originalname)
 })
+
 const upload = multer({storage})
 app.use("/uploads",express.static(uploadPath))
 
@@ -54,9 +53,8 @@ function verificarToken(req,res,next){
   const auth = req.headers.authorization
   if(!auth) return res.status(401).json({erro:"Token necessário"})
 
-  const token = auth.split(" ")[1]
-
   try{
+    const token = auth.split(" ")[1]
     req.usuario = jwt.verify(token,JWT_SECRET)
     next()
   }catch{
@@ -86,43 +84,49 @@ app.post("/login-admin",(req,res)=>{
 })
 
 app.post("/login-aluno",async (req,res)=>{
-  let {cpf,senha} = req.body
-  cpf = cpf.replace(/\D/g,'')
+  try{
+    let {cpf,senha} = req.body
+    cpf = cpf.replace(/\D/g,'')
 
-  const [rows] = await db.query("SELECT * FROM alunos WHERE cpf=?",[cpf])
+    const [rows] = await db.query("SELECT * FROM alunos WHERE cpf=?",[cpf])
+    if(rows.length===0) return res.json({success:false})
 
-  if(rows.length===0) return res.json({success:false})
+    const aluno = rows[0]
+    const ok = await bcrypt.compare(senha,aluno.senha)
+    if(!ok) return res.json({success:false})
 
-  const aluno = rows[0]
-  const ok = await bcrypt.compare(senha,aluno.senha)
+    const token = jwt.sign({id:aluno.id,tipo:"aluno"},JWT_SECRET,{expiresIn:"8h"})
+    res.json({success:true,token,aluno})
 
-  if(!ok) return res.json({success:false})
-
-  const token = jwt.sign({id:aluno.id,tipo:"aluno"},JWT_SECRET,{expiresIn:"8h"})
-
-  res.json({success:true,token,aluno})
+  }catch(err){
+    console.log(err)
+    res.json({success:false})
+  }
 })
 
 app.post("/login-professor",async (req,res)=>{
-  let {cpf,senha} = req.body
-  cpf = cpf.replace(/\D/g,'')
+  try{
+    let {cpf,senha} = req.body
+    cpf = cpf.replace(/\D/g,'')
 
-  const [rows] = await db.query("SELECT * FROM professores WHERE cpf=?",[cpf])
+    const [rows] = await db.query("SELECT * FROM professores WHERE cpf=?",[cpf])
+    if(rows.length===0) return res.json({success:false})
 
-  if(rows.length===0) return res.json({success:false})
+    const prof = rows[0]
+    const ok = await bcrypt.compare(senha,prof.senha)
+    if(!ok) return res.json({success:false})
 
-  const prof = rows[0]
-  const ok = await bcrypt.compare(senha,prof.senha)
+    const token = jwt.sign({id:prof.id,tipo:"professor"},JWT_SECRET,{expiresIn:"8h"})
+    res.json({success:true,token,professor:prof})
 
-  if(!ok) return res.json({success:false})
-
-  const token = jwt.sign({id:prof.id,tipo:"professor"},JWT_SECRET,{expiresIn:"8h"})
-
-  res.json({success:true,token,professor:prof})
+  }catch(err){
+    console.log(err)
+    res.json({success:false})
+  }
 })
 
 /* =========================
-CADASTROS
+CADASTRO
 ========================= */
 app.post("/aluno",verificarToken,apenasAdmin, async (req,res)=>{
   try{
@@ -158,8 +162,10 @@ app.post("/professor",verificarToken,apenasAdmin, async (req,res)=>{
 
     const hash = await bcrypt.hash(senha || "1234",10)
 
-    await db.query("INSERT INTO professores(nome,cpf,senha,disciplina) VALUES(?,?,?,?)",
-      [nome,cpf,hash,disciplina])
+    await db.query(
+      "INSERT INTO professores(nome,cpf,senha,disciplina) VALUES(?,?,?,?)",
+      [nome,cpf,hash,disciplina]
+    )
 
     res.json({success:true})
 
@@ -219,7 +225,48 @@ app.get("/boletim/:id",verificarToken, async (req,res)=>{
 })
 
 /* =========================
-DASHBOARD (CORRIGIDO)
+TROCAR SENHA
+========================= */
+app.post("/trocar-senha",verificarToken,async (req,res)=>{
+  try{
+    const {cpf,senhaAtual,novaSenha,tipo} = req.body
+
+    if(tipo === "aluno"){
+      const [rows] = await db.query("SELECT * FROM alunos WHERE cpf=?",[cpf])
+      if(rows.length===0) return res.json({success:false})
+
+      const aluno = rows[0]
+      const ok = await bcrypt.compare(senhaAtual,aluno.senha)
+      if(!ok) return res.json({success:false})
+
+      const hash = await bcrypt.hash(novaSenha,10)
+      await db.query("UPDATE alunos SET senha=? WHERE id=?",[hash,aluno.id])
+
+      return res.json({success:true})
+    }
+
+    if(tipo === "professor"){
+      const [rows] = await db.query("SELECT * FROM professores WHERE cpf=?",[cpf])
+      if(rows.length===0) return res.json({success:false})
+
+      const prof = rows[0]
+      const ok = await bcrypt.compare(senhaAtual,prof.senha)
+      if(!ok) return res.json({success:false})
+
+      const hash = await bcrypt.hash(novaSenha,10)
+      await db.query("UPDATE professores SET senha=? WHERE id=?",[hash,prof.id])
+
+      return res.json({success:true})
+    }
+
+  }catch(err){
+    console.log(err)
+    res.json({success:false})
+  }
+})
+
+/* =========================
+DASHBOARD
 ========================= */
 app.get("/dashboard",verificarToken, async (req,res)=>{
   try{
