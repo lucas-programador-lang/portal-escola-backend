@@ -8,113 +8,89 @@ const path = require("path")
 const fs = require("fs")
 
 const app = express()
-
 app.use(express.json())
 
 /* =========================
 CORS
 ========================= */
-
 app.use(cors({
-origin:"*",
-methods:["GET","POST","PUT","DELETE","OPTIONS"],
-allowedHeaders:["Content-Type","Authorization"]
+  origin: "*",
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type","Authorization"]
 }))
 
-app.options("*",cors())
+app.options("*", cors())
 
 /* =========================
 JWT
 ========================= */
-
 const JWT_SECRET = process.env.JWT_SECRET || "segredo_super_forte"
 
 /* =========================
 UPLOAD
 ========================= */
-
 const uploadPath = path.join(__dirname,"uploads")
 
 if(!fs.existsSync(uploadPath)){
-fs.mkdirSync(uploadPath)
+  fs.mkdirSync(uploadPath)
 }
 
 const storage = multer.diskStorage({
-
-destination:(req,file,cb)=>{
-cb(null,uploadPath)
-},
-
-filename:(req,file,cb)=>{
-cb(null,Date.now()+"-"+file.originalname)
-}
-
+  destination:(req,file,cb)=> cb(null,uploadPath),
+  filename:(req,file,cb)=> cb(null,Date.now()+"-"+file.originalname)
 })
 
 const upload = multer({storage})
 
-app.use("/uploads",express.static(uploadPath))
-
-/* ROTA DE UPLOAD */
-
-app.post("/upload",verificarToken,upload.single("imagem"),(req,res)=>{
-
-if(!req.file){
-return res.json({success:false})
-}
-
-res.json({
-success:true,
-url: req.protocol + "://" + req.get("host") + "/uploads/" + req.file.filename
-})
-
-})
+app.use("/uploads", express.static(uploadPath))
 
 /* =========================
 MYSQL
 ========================= */
-
 let db
 
 function conectarBanco(){
 
-if(process.env.DATABASE_URL){
+  try{
 
-const url = new URL(process.env.DATABASE_URL)
+    if(process.env.DATABASE_URL){
 
-db = mysql.createPool({
-host:url.hostname,
-user:url.username,
-password:url.password,
-database:url.pathname.replace("/",""),
-port:url.port,
-connectionLimit:10
-})
+      const url = new URL(process.env.DATABASE_URL)
 
-}else{
+      db = mysql.createPool({
+        host:url.hostname,
+        user:url.username,
+        password:url.password,
+        database:url.pathname.replace("/",""),
+        port:url.port,
+        connectionLimit:10
+      })
 
-db = mysql.createPool({
-host:process.env.DB_HOST,
-user:process.env.DB_USER,
-password:process.env.DB_PASSWORD,
-database:process.env.DB_NAME,
-port:process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
-connectionLimit:10
-})
+    } else {
 
-}
+      db = mysql.createPool({
+        host:process.env.DB_HOST,
+        user:process.env.DB_USER,
+        password:process.env.DB_PASSWORD,
+        database:process.env.DB_NAME,
+        port:process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
+        connectionLimit:10
+      })
 
-db.getConnection((err,conn)=>{
+    }
 
-if(err){
-console.log("❌ Erro banco:",err)
-}else{
-console.log("✅ Banco conectado")
-conn.release()
-}
+    db.getConnection((err,conn)=>{
+      if(err){
+        console.log("❌ Erro banco:",err)
+      } else {
+        console.log("✅ Banco conectado")
+        conn.release()
+      }
+    })
 
-})
-
+  }catch(e){
+    console.log("Erro geral banco:", e)
+  }
 }
 
 conectarBanco()
@@ -122,324 +98,241 @@ conectarBanco()
 /* =========================
 TOKEN
 ========================= */
-
 function verificarToken(req,res,next){
 
-const auth=req.headers.authorization
+  const auth = req.headers.authorization
 
-if(!auth){
-return res.status(401).json({erro:"Token necessário"})
+  if(!auth){
+    return res.status(401).json({erro:"Token necessário"})
+  }
+
+  const token = auth.split(" ")[1]
+
+  try{
+    const decoded = jwt.verify(token,JWT_SECRET)
+    req.usuario = decoded
+    next()
+  }catch{
+    return res.status(401).json({erro:"Token inválido"})
+  }
 }
 
-const token=auth.split(" ")[1]
-
-try{
-
-const decoded=jwt.verify(token,JWT_SECRET)
-
-req.usuario=decoded
-
-next()
-
-}catch{
-
-return res.status(401).json({erro:"Token inválido"})
-
+/* =========================
+APENAS ADMIN
+========================= */
+function apenasAdmin(req,res,next){
+  if(req.usuario.tipo !== "admin"){
+    return res.status(403).json({erro:"Apenas admin"})
+  }
+  next()
 }
 
-}
+/* =========================
+UPLOAD
+========================= */
+app.post("/upload", verificarToken, upload.single("imagem"), (req,res)=>{
+  if(!req.file){
+    return res.json({success:false})
+  }
+
+  res.json({
+    success:true,
+    url: req.protocol + "://" + req.get("host") + "/uploads/" + req.file.filename
+  })
+})
 
 /* =========================
 LOGIN ADMIN
 ========================= */
-
 app.post("/login-admin",(req,res)=>{
 
-const {usuario,senha}=req.body
+  const {usuario,senha} = req.body
 
-if(usuario==="admin" && senha==="123456"){
+  if(usuario==="admin" && senha==="123456"){
+    const token = jwt.sign({tipo:"admin"},JWT_SECRET,{expiresIn:"8h"})
+    return res.json({success:true,token})
+  }
 
-const token=jwt.sign({tipo:"admin"},JWT_SECRET,{expiresIn:"8h"})
-
-return res.json({success:true,token})
-
-}
-
-res.json({success:false})
-
+  res.json({success:false})
 })
 
 /* =========================
 LOGIN ALUNO
 ========================= */
-
 app.post("/login-aluno",(req,res)=>{
 
-let {cpf,senha}=req.body
+  let {cpf,senha} = req.body
+  cpf = cpf.replace(/\D/g,'')
 
-cpf = cpf.replace(/\D/g,'')
+  db.query("SELECT * FROM alunos WHERE cpf=?",[cpf], async (err,result)=>{
 
-db.query(
-"SELECT * FROM alunos WHERE cpf=?",
-[cpf],
-async (err,result)=>{
+    if(err || !result || result.length === 0){
+      return res.json({success:false})
+    }
 
-if(err || result.length===0){
-return res.json({success:false})
-}
+    const aluno = result[0]
 
-const aluno=result[0]
+    const senhaValida = await bcrypt.compare(senha,aluno.senha)
 
-const senhaValida=await bcrypt.compare(senha,aluno.senha)
+    if(!senhaValida){
+      return res.json({success:false})
+    }
 
-if(!senhaValida){
-return res.json({success:false})
-}
+    const token = jwt.sign(
+      {id:aluno.id,tipo:"aluno"},
+      JWT_SECRET,
+      {expiresIn:"8h"}
+    )
 
-const token=jwt.sign(
-{id:aluno.id,tipo:"aluno"},
-JWT_SECRET,
-{expiresIn:"8h"}
-)
-
-res.json({
-success:true,
-token,
-aluno
-})
-
-})
-
+    res.json({success:true,token,aluno})
+  })
 })
 
 /* =========================
 LOGIN PROFESSOR
 ========================= */
-
 app.post("/login-professor",(req,res)=>{
 
-let {cpf,senha}=req.body
+  let {cpf,senha} = req.body
+  cpf = cpf.replace(/\D/g,'')
 
-cpf = cpf.replace(/\D/g,'')
+  db.query("SELECT * FROM professores WHERE cpf=?",[cpf], async (err,result)=>{
 
-db.query(
-"SELECT * FROM professores WHERE cpf=?",
-[cpf],
-async (err,result)=>{
+    if(err || !result || result.length === 0){
+      return res.json({success:false})
+    }
 
-if(err || result.length===0){
-return res.json({success:false})
-}
+    const professor = result[0]
 
-const professor=result[0]
+    const senhaValida = await bcrypt.compare(senha,professor.senha)
 
-const senhaValida=await bcrypt.compare(senha,professor.senha)
+    if(!senhaValida){
+      return res.json({success:false})
+    }
 
-if(!senhaValida){
-return res.json({success:false})
-}
+    const token = jwt.sign(
+      {id:professor.id,tipo:"professor"},
+      JWT_SECRET,
+      {expiresIn:"8h"}
+    )
 
-const token=jwt.sign(
-{id:professor.id,tipo:"professor"},
-JWT_SECRET,
-{expiresIn:"8h"}
-)
-
-res.json({
-success:true,
-token,
-professor
-})
-
-})
-
+    res.json({success:true,token,professor})
+  })
 })
 
 /* =========================
 CADASTRAR ALUNO
 ========================= */
+app.post("/aluno", verificarToken, apenasAdmin, async (req,res)=>{
 
-app.post("/aluno",verificarToken,async (req,res)=>{
+  let {nome,cpf,senha} = req.body
+  cpf = cpf.replace(/\D/g,'')
 
-let {nome,cpf,senha}=req.body
+  if(!nome || !cpf){
+    return res.json({success:false})
+  }
 
-cpf = cpf.replace(/\D/g,'')
+  db.query("SELECT id FROM alunos WHERE cpf=?",[cpf], async (err,result)=>{
 
-if(!nome || !cpf){
-return res.json({success:false})
-}
+    if(result && result.length > 0){
+      return res.json({success:false,erro:"CPF já cadastrado"})
+    }
 
-db.query(
-"SELECT id FROM alunos WHERE cpf=?",
-[cpf],
-async (err,result)=>{
+    const hash = await bcrypt.hash(senha || "1234",10)
 
-if(result.length > 0){
-return res.json({success:false,erro:"CPF já cadastrado"})
-}
-
-const hash=await bcrypt.hash(senha || "1234",10)
-
-db.query(
-"INSERT INTO alunos(nome,cpf,senha) VALUES (?,?,?)",
-[nome,cpf,hash],
-(err)=>{
-
-if(err){
-console.log(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
+    db.query(
+      "INSERT INTO alunos(nome,cpf,senha) VALUES (?,?,?)",
+      [nome,cpf,hash],
+      (err)=>{
+        if(err){
+          console.log(err)
+          return res.json({success:false})
+        }
+        res.json({success:true})
+      }
+    )
+  })
 })
 
 /* =========================
 CADASTRAR PROFESSOR
 ========================= */
+app.post("/professor", verificarToken, apenasAdmin, async (req,res)=>{
 
-app.post("/professor",verificarToken,async (req,res)=>{
+  let {nome,cpf,senha,disciplina} = req.body
+  cpf = cpf.replace(/\D/g,'')
 
-let {nome,cpf,senha,disciplina}=req.body
+  if(!nome || !cpf || !disciplina){
+    return res.json({success:false})
+  }
 
-cpf = cpf.replace(/\D/g,'')
+  db.query("SELECT id FROM professores WHERE cpf=?",[cpf], async (err,result)=>{
 
-if(!nome || !cpf || !disciplina){
-return res.json({success:false})
-}
+    if(result && result.length > 0){
+      return res.json({success:false,erro:"CPF já cadastrado"})
+    }
 
-db.query(
-"SELECT id FROM professores WHERE cpf=?",
-[cpf],
-async (err,result)=>{
+    const hash = await bcrypt.hash(senha || "1234",10)
 
-if(result.length > 0){
-return res.json({success:false,erro:"CPF já cadastrado"})
-}
-
-const hash=await bcrypt.hash(senha || "1234",10)
-
-db.query(
-"INSERT INTO professores(nome,cpf,senha,disciplina) VALUES (?,?,?,?)",
-[nome,cpf,hash,disciplina],
-(err)=>{
-
-if(err){
-console.log(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
-})
-
-})
-
-/* =========================
-DASHBOARD
-========================= */
-
-app.get("/dashboard",verificarToken,(req,res)=>{
-
-let dados={}
-
-db.query("SELECT COUNT(*) total FROM alunos",(err,r1)=>{
-
-dados.alunos=r1?.[0]?.total || 0
-
-db.query("SELECT COUNT(*) total FROM professores",(err,r2)=>{
-
-dados.professores=r2?.[0]?.total || 0
-
-db.query("SELECT COUNT(*) total FROM publicacoes",(err,r3)=>{
-
-dados.publicacoes=r3?.[0]?.total || 0
-
-res.json(dados)
-
-})
-
-})
-
-})
-
+    db.query(
+      "INSERT INTO professores(nome,cpf,senha,disciplina) VALUES (?,?,?,?)",
+      [nome,cpf,hash,disciplina],
+      (err)=>{
+        if(err){
+          console.log(err)
+          return res.json({success:false})
+        }
+        res.json({success:true})
+      }
+    )
+  })
 })
 
 /* =========================
 PUBLICAÇÕES
 ========================= */
+app.post("/publicacao", verificarToken, apenasAdmin, (req,res)=>{
 
-app.post("/publicacao",verificarToken,(req,res)=>{
+  const {titulo,conteudo,imagem,tipo} = req.body
 
-const {titulo,conteudo,imagem,tipo}=req.body
+  if(!titulo || !tipo){
+    return res.json({success:false})
+  }
 
-if(!titulo || !tipo){
-return res.json({success:false})
-}
-
-db.query(
-"INSERT INTO publicacoes(titulo,conteudo,imagem,tipo) VALUES (?,?,?,?)",
-[titulo,conteudo || "",imagem || "",tipo],
-(err)=>{
-
-if(err){
-console.log(err)
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
+  db.query(
+    "INSERT INTO publicacoes(titulo,conteudo,imagem,tipo) VALUES (?,?,?,?)",
+    [titulo,conteudo || "",imagem || "",tipo],
+    (err)=>{
+      if(err){
+        console.log(err)
+        return res.json({success:false})
+      }
+      res.json({success:true})
+    }
+  )
 })
 
 app.get("/publicacoes",(req,res)=>{
-
-db.query(
-"SELECT * FROM publicacoes ORDER BY data_publicacao DESC",
-(err,result)=>{
-
-if(err){
-return res.json([])
-}
-
-res.json(result)
-
+  db.query("SELECT * FROM publicacoes ORDER BY data_publicacao DESC",(err,result)=>{
+    if(err) return res.json([])
+    res.json(result)
+  })
 })
 
-})
-
-app.delete("/publicacao/:id",verificarToken,(req,res)=>{
-
-db.query(
-"DELETE FROM publicacoes WHERE id=?",
-[req.params.id],
-(err)=>{
-
-if(err){
-return res.json({success:false})
-}
-
-res.json({success:true})
-
-})
-
+app.delete("/publicacao/:id", verificarToken, apenasAdmin, (req,res)=>{
+  db.query("DELETE FROM publicacoes WHERE id=?",[req.params.id],(err)=>{
+    if(err) return res.json({success:false})
+    res.json({success:true})
+  })
 })
 
 /* ========================= */
-
 app.get("/",(req,res)=>{
-res.send("API Portal Escolar Seguro")
+  res.send("API Portal Escolar Seguro")
 })
 
 const PORT = process.env.PORT || 3000
 
 app.listen(PORT,()=>{
-console.log("🚀 Servidor rodando na porta",PORT)
+  console.log("🚀 Servidor rodando na porta",PORT)
 })
